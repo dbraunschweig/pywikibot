@@ -1627,11 +1627,10 @@ def list_userfiles(user):
     print("<gallery>")
     pages = user_files(user)
     for page in pages:
-        print(page.title())
-        # categories = page.categories()
-        # for category in categories:
-        #     if category.title() == "Category:Files with no machine-readable source":
-        #         print(page.title())
+        categories = page.categories()
+        for category in categories:
+            if category.title() == "Category:Files with no machine-readable source":
+                print(page.title())
     print("</gallery>")
 
 
@@ -1711,18 +1710,60 @@ def replace_file(old, new):
             page.text = text
             page.save(summary="Replacing " + old + " with " + new, minor=True, botflag=True)
 
+
 site = pywikibot.Site("en", "wikiversity")
 
-#replace_file("File:Armistice.jpg", "File:US 64th regiment celebrate the Armistice.jpg")
-
-pages = categorymembers("Files_with_no_machine-readable_source")
+list = []
+pages = categorymembers("Files_with_no_machine-readable source")
 for page in pages:
 
-    links = page.usingPages()
-    for link in links:
-        if link.title().find("North Carolina") >= 0:
-            print(page.title())
-            break
+    upload = page.getLatestUploader()
+    user = upload[0]
+    # if user == "Nobody60":
+    #     continue
+    # if user == "Atcovi":
+    #     continue
+    # if user == "Leighblackall":
+    #     continue
+
+    tuple = (user, page.title())
+    list.append((tuple))
+
+user = ""
+text = ""
+list = sorted(list)
+for tuple in list:
+    if user != tuple[0]:
+        if text != "":
+            text += "{{colend}}\n"
+            text += "~~~~"
+            print(text)
+            print()
+
+        user = tuple[0]
+        print(user)
+
+        text = "== Files Missing Information ==\n"
+        text += "Thanks for uploading files to Wikiversity. All files must have source and license information "
+        text += "to stay at Wikiversity. The following files are missing {{tlx|Information}} and/or "
+        text += "[[Wikiversity:License tags]], and will be deleted if the missing information is not added. "
+        text += "See [[Wikiversity:Uploading files]] for more information.\n"
+        text += "{{colbegin|3}}\n"
+
+    text += "* [[:" + tuple[1] + "]]\n"
+if text != "":
+    text += "{{colend}}\n"
+    text += "~~~~"
+    print(text)
+
+# pages = categorymembers("Files_with_no_machine-readable_source")
+# for page in pages:
+#
+#     links = page.usingPages()
+#     for link in links:
+#         if link.title().find("Motivation") >= 0:
+#             print(page.title())
+#             break
 
 
 # pages = categorymembers("Files with no machine-readable source")
