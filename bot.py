@@ -1711,8 +1711,6 @@ def replace_file(old, new):
             page.save(summary="Replacing " + old + " with " + new, minor=True, botflag=True)
 
 
-site = pywikibot.Site("en", "wikiversity")
-
 def files_missing_information():
     list = []
     pages = categorymembers("Files_with_no_machine-readable source")
@@ -1755,56 +1753,141 @@ def files_missing_information():
         page.text = page.text + text
         page.save(summary="Files Missing Information", minor=False, botflag=True)
 
-# pages = categorymembers("Files_with_no_machine-readable_source")
-# for page in pages:
-#
-#     links = page.usingPages()
-#     for link in links:
-#         if link.title().find("Motivation") >= 0:
-#             print(page.title())
-#             break
+
+site = pywikibot.Site("en", "wikiversity")
+
+pages = site.allpages(namespace=6, content=True, prefix="P", start="P")
+save = True
+for page in pages:
+    title = page.title()
+    text = page.text
+
+    if page.fileIsOnCommons():
+        continue
+
+    if text.find("== Summary ==\n") >= 0:
+        continue
+
+    if text.find("== {{int:filedesc}} ==") >= 0:
+        continue
+
+    if text.find("=={{int:filedesc}}==") >= 0:
+        continue
+
+    if text.find("{{Delete|Unused fair use file}}") >= 0:
+        continue
+
+    if text.find("{{Non-free use rationale") >= 0:
+        continue
+
+    print(title)
+
+    while text.find(" \n") >= 0:
+        text = text.replace(" \n", "\n")
+
+    if text.find("==Licensing==") == 0:
+        text = text.replace("==Licensing==", "== Summary ==")
+
+    if text.find("== Licensing ==") == 0:
+        text = text.replace("== Licensing ==", "== Summary ==")
+
+    if text.find("==License information==") == 0:
+        text = text.replace("==License information==", "== Summary ==")
+
+    text = text.replace("==Summary==", "== Summary ==")
+    text = text.replace("==Summary ==", "== Summary ==")
+    text = text.replace("== Summary==", "== Summary ==")
+
+    if text.find("==License Information==") == 0:
+        text = text.replace("==License Information==", "== Summary ==")
+
+    if text.find("== License Information ==") == 0:
+        text = text.replace("== License Information ==", "== Summary ==")
+
+    if text.find("== Summary ==") < 0:
+        index = text.lower().find("{{information")
+        if index >= 0:
+            text = text[0:index] + "== Summary ==\n" + text[index:]
+        else:
+            print(text)
+            exit(0)
+
+    text = text.replace("{{information", "{{Information")
+    text = text.replace("|Permission=Fair use\n", "|Permission=\n")
+    text = text.replace("== Licensing: ==", "== Licensing ==")
+    text = text.replace("==License==", "== Licensing ==")
+    text = text.replace("== License ==", "== Licensing ==")
+    text = text.replace("==Licensing==", "== Licensing ==")
+
+    text = text.replace("}}\n[[", "}}\n\n[[")
+    text = text.replace("}}\n== Licensing ==", "}}\n\n== Licensing ==")
+
+    if text.find("== Licensing ==") < 0 and text.find("== {{int:license}} ==") < 0:
+        text = text.replace("}}\n{{", "}}\n\n== Licensing ==\n{{")
+
+    if text.find("== Licensing ==") < 0 and text.find("== {{int:license}} ==") < 0:
+        text = text.replace("}}\n\n{{", "}}\n\n== Licensing ==\n{{")
+
+    if text.find("== Licensing ==") < 0 and text.find("== {{int:license}} ==") < 0:
+        text = text + "\n\n== Licensing ==\n"
+        text = text.replace("\n\n\n== Licensing ==\n", "\n\n== Licensing ==\n")
+
+    index = text.find("== Licensing ==\n")
+    index = text.find("== Licensing ==\n", index + 16)
+    if index >= 0:
+        text = text[0:index] + text[index + 16:]
+
+    licenses = [
+        "{{cc-by-sa-2.0}}",
+        "{{Cc-by-sa-3.0}}",
+        "{{cc-by-sa-3.0}}",
+        "{{CC-by-sa-3.0-dual}}",
+        "{{cc-by-sa-2.5,2.0,1.0}}",
+        "{{cc-by-sa-3.0,2.5,2.0,1.0}}",
+        "{{cc-by-3.0}}",
+        "{{CopyrightByWikimedia}}",
+        "{{Fairuse}}",
+        "{{fairuse}}",
+        "{{GFDL}}",
+        "{{GFDL-self}}",
+        "{{GPL}}",
+        "{{PD}}",
+        "{{PD-ineligible}}",
+        "{{PD1}}",
+        "{{PD-self}}",
+        "{{PD-US}}"
+    ]
+
+    while text.find("  =") >= 0:
+        text = text.replace("  =", " =")
 
 
-# pages = categorymembers("Files with no machine-readable source")
-# for page in pages:
-#     upload = page.getLatestUploader()
-#     user = upload[0]
-#     print(user)
-# exit(0)
+    match = re.search("\|Permission ?= ?(\{\{.*\}\})\n", text)
+    if match != None:
+        if match.group(1) in licenses:
+            text = text[0:match.start(1)] + text[match.end(1):] + match.group(1)
+        else:
+            print(text)
+            exit(0)
 
-# titles = [
-#     "File:Ob c9e74c geochimie-des-volcans-faial-tectoniqu.jpg"
-# ]
+    text = fix_categorytext(text)
 
-# page = pywikibot.Page(site, "Template:PD-old")
-# pages = page.embeddedin(content=True)
+    while text.find(" \n") >= 0:
+        text = text.replace(" \n", "\n")
+    while text.find("\n\n\n") >= 0:
+        text = text.replace("\n\n\n", "\n\n")
+    text = text.replace("}}\n{{", "}}\n\n{{")
 
-# pages = site.allpages(namespace=6, content=True, prefix="C")
-# for page in pages:
-#    title = page.title()
-#
-#     if title.find("File:") != 0:
-#         continue
+    text = text.strip()
 
-# for title in titles:
-#     page = pywikibot.FilePage(site, title)
+    print(text)
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
-    # print(title)
-    # print(text)
-    # exit(0)
+    if save and page.text != text:
+        page.text = text
+        page.save(summary="Summary", minor=True, botflag=True)
 
-    # print("* [[:" + title + "]]")
-    # continue
-
-    # lines = text
-    # lines = text.replace("\n\n", "\n")
-    # lines = lines.strip().split("\n")
-    #
-    # if len(lines) != 2:
-    #     continue
-
-    # if lines[0] != "== Summary ==":
-    #     continue
+    continue
 
     # description = lines[1].strip()
 
@@ -1863,4 +1946,4 @@ def files_missing_information():
 #delete_broken_redirects()
 #fix_double_redirects()
 
-files_missing_information()
+#files_missing_information()
