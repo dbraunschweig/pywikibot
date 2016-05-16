@@ -1259,7 +1259,7 @@ def delete_unused_topic_redirects():
         if line[0:9] != "|[[Topic:":
             continue
 
-        match = re.search("\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)", line)
+        match = re.search("\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)\|\|(.*)", line)
         title = match.group(1).replace("[[", "").replace("]]", "")
         created = match.group(2).replace("&#8209;", "-")
         lastedit = match.group(3).replace("&#8209;", "-")
@@ -1267,18 +1267,19 @@ def delete_unused_topic_redirects():
         editors = int(match.group(5))
         length = int(match.group(6))
         subpage_count = int(match.group(7))
-        views = match.group(8)
-        status = match.group(9).replace("&nbsp;", " ")
+        link_count = int(match.group(8))
+        views = match.group(9)
+        status = match.group(10).replace("&nbsp;", " ")
 
         if views == "":
             views = -1
         else:
             views = float(views)
 
-        if created >= "2016-01-01":
+        if created >= "2016-04-01":
             continue
 
-        if lastedit >= "2016-01-01":
+        if lastedit >= "2016-04-01":
             continue
 
         if subpage_count > 0:
@@ -1434,6 +1435,94 @@ def update_category_review():
 
     result += "|}\n\n[[Category:Wikiversity]]\n"
     page = pywikibot.Page(site, "Wikiversity:Category Review")
+    page.text = result
+    page.save(summary="Update", minor=True, botflag=True)
+
+
+def generate_school_review():
+    result = "Pages in the School namespace as of " + time.strftime("%Y %B %d") + " for review. "
+    result += "Last Edit, Total Edits and Total Editors do not include bots. "
+    result += "Daily Views is the average daily views from 2015-10-01 to 2016-04-30. "
+    result += "Links are incoming links, not counting this page.\n"
+    result += "\n"
+    result += '{| class="wikitable sortable"\n'
+    result += "|-\n"
+    result += "! Page !! Created !! Last Edit !! Total Edits !! Total Editors !! Length !! Subpages !! Links !! Daily Views !! Status"
+    print(result)
+    result += "\n"
+
+    pages = pywikibot.site.APISite.allpages(site, namespace=100)
+    for page in pages:
+        title = page.title()
+        if title.find("/") >= 0:
+            continue
+        text = page.text
+
+        history = page.getVersionHistory()
+        created = history[-1].timestamp.date()
+
+        users = dict()
+        lastedit = None
+        for entry in history:
+            user = entry.user.title()
+            if user.lower().find("bot") >= 0:
+                continue
+            if lastedit == None:
+                lastedit = entry.timestamp.date()
+            if user in users:
+                users[user] += 1
+            else:
+                users[user] = 1
+
+        edits = 0
+        for user in users:
+            edits += users[user]
+
+        editors = len(users)
+        length = len(text)
+
+        subpages = pywikibot.site.APISite.allpages(site, prefix=title.replace("School:", "") + "/", namespace=100, filterredir=False)
+        subpage_count = 0
+        for subpage in subpages:
+            subpage_count += 1
+
+        links = page.backlinks()
+        link_count = 0
+        for link in links:
+            if link.title() == "Wikiversity:School Review":
+                continue
+            link_count += 1
+
+        views = get_pageviews("en.wikiversity", title, "20151001", "20160430")
+        if views == -1:
+            views = ""
+        else:
+            views = '{0:.2f}'.format(views)
+
+        if page.isRedirectPage():
+            status = "redirect"
+        elif text.lower().find("{{proposed deletion") >= 0:
+            status = "proposed deletion"
+        elif text.lower().find("{{merge") >= 0:
+            status = "merge"
+        else:
+            status = ""
+
+        line = "|-\n|" + "[[" + title + "]]"
+        line += "||" + str(created).replace("-", "&#8209;")
+        line += "||" + str(lastedit).replace("-", "&#8209;")
+        line += "||" + str(edits)
+        line += "||" + str(editors)
+        line += "||" + str(length)
+        line += "||" + str(subpage_count)
+        line += "||" + str(link_count)
+        line += "||" + views
+        line += "||" + str(status).replace(" ", "&nbsp;")
+        print(line)
+        result += line + "\n"
+
+    result += "|}\n\n[[Category:Wikiversity]]\n"
+    page = pywikibot.Page(site, "Wikiversity:School Review")
     page.text = result
     page.save(summary="Update", minor=True, botflag=True)
 
@@ -1911,7 +2000,7 @@ def move_topic():
         page.move(newtitle=title, reason="Making a portal.")
 
 
-def fix_page_links(title):
+def fix_page_links(title, save=False):
     page = pywikibot.Page(site, title)
     text = page.text
 
@@ -1929,8 +2018,6 @@ def fix_page_links(title):
             continue
         if link.lower().find("wikipedia:") == 0:
             continue
-
-        print(link)
 
         link = pywikibot.Page(site, link)
         if link == None:
@@ -1950,7 +2037,7 @@ def fix_page_links(title):
         print(text[item[0]:item[2]] + " -> " + item[1])
         text = text[0:item[0]] + item[1] + text[item[2]:]
 
-    if page.text != text:
+    if page.text != text and save == True:
         page.text = text
         summary = "Fixing links to moved pages."
         page.save(summary=summary, minor=True, botflag=True)
@@ -1960,11 +2047,64 @@ def fix_redirect(title):
     page = pywikibot.Page(site, title)
     links = page.backlinks()
     for link in links:
+        print(link.title())
         fix_page_links(link.title())
 
 
-def show_unused_redirects(start):
-    pages = site.allpages(filterredir=True, total=10, start=start)
+def fix_interwiki_links_title(title, save=False):
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+    print(title)
+    page = pywikibot.Page(site, title)
+    text = page.text
+    regex = re.compile("\[https?:\/\/en\.wikipedia\.org\/wiki\/([^ \]]*) ?([^\]]*)?\]", re.IGNORECASE)
+    while(True):
+        match = regex.search(text)
+        if match == None:
+            break
+
+        link = "[[Wikipedia:" + match.group(1).replace("_", " ")
+        if match.group(2).strip() != "":
+            link += "|" + match.group(2)
+        else:
+            link += "|" + match.group(1).replace("_", " ")
+        link += "]]"
+
+        print(link)
+        text = text[0:match.start(0)] + link + text[match.end(0):]
+    if page.text != text and save == True:
+        page.text = text
+        page.save(summary="Replacing external links with interwiki links.", minor=True, botflag=True)
+
+
+def fix_interwiki_links(offset=0, limit=0, save=False):
+    url = "https://en.wikiversity.org/w/index.php?title=Special:LinkSearch&limit=" + str(limit)
+    url += "&offset=" + str(offset) + "&target=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2F"
+    text = urllib.request.urlopen(url).read()
+    text = text.decode("UTF-8")
+    lines = re.findall("<li>(.+?)<\/li>", text)
+    for line in lines:
+        titles = re.findall('title="(.+?)">', line)
+        for title in titles:
+            if title.find(" talk:") > 0:
+                continue
+            if title.find("Talk:") == 0:
+                continue
+            if title.find("User:") == 0:
+                continue
+            if title.find("File:") == 0:
+                continue
+            if title.find("Wikiversity:") == 0:
+                continue
+            if title.find("Template:") == 0:
+                continue
+            if title.find("Wikiversity Journal of Medicine") == 0:
+                continue
+
+            fix_interwiki_links_title(title, save)
+
+
+def delete_unused_redirects(start):
+    pages = site.allpages(filterredir=True, total=100, start=start)
     for page in pages:
         title = page.title()
 
@@ -1977,35 +2117,29 @@ def show_unused_redirects(start):
             break
 
         if found:
-            print(title)
             continue
 
-        continue
-        views = get_pageviews("en.wikiversity", title, "20151001", "20160331")
-        if views >= 0.5:
+        views = get_pageviews("en.wikiversity", title, "20151001", "20160430")
+        if views >= 0.1:
             continue
 
-        print(title)
         text = page.text
         text = text.replace("#REDIRECT", "")
         index = text.find("]]")
         text = text[0:index+2].strip()
-        page.delete(reason="Unused redirect to " + text, prompt=False)
+        print(title + " -> " + text)
+        #page.delete(reason="Unused redirect to " + text, prompt=False)
 
 
 site = pywikibot.Site("en", "wikiversity")
 
-pages = categorymembers("Files with no machine-readable description")
-for page in pages:
-    title = page.title()
-    text = page.text
+delete_unused_topic_redirects()
 
-    text = text.replace("|Description=", "|Description={{PAGENAME}}")
 
-    if page.text != text:
-        print(title)
-        page.text = text
-        page.save(summary="Description", minor=True, botflag=True)
+#fix_redirect("Topic:Abenaki")
+#fix_page_links("School:Psychology", True)
+
+#delete_unused_redirects("Actin-binding proteins")
 
 
 # fix_redirect("AGC box")
@@ -2021,7 +2155,7 @@ for page in pages:
 
 #show_sister_backlinks("Wikipedia")
 
-#delete_broken_redirects()
-#fix_double_redirects()
+# delete_broken_redirects()
+# fix_double_redirects()
 
 #files_missing_information()
